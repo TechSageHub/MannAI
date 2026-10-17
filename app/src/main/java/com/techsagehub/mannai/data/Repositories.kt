@@ -8,6 +8,10 @@ import com.techsagehub.mannai.data.db.ReminderDao
 import com.techsagehub.mannai.data.db.ReminderEntity
 import com.techsagehub.mannai.data.db.TaskDao
 import com.techsagehub.mannai.data.db.TaskEntity
+import com.techsagehub.mannai.data.db.WhatsAppContactDao
+import com.techsagehub.mannai.data.db.WhatsAppContactEntity
+import com.techsagehub.mannai.data.db.WhatsAppMessageDao
+import com.techsagehub.mannai.data.db.WhatsAppMessageEntity
 import kotlinx.coroutines.flow.Flow
 
 class TaskRepository(private val dao: TaskDao) {
@@ -66,4 +70,55 @@ class ChatRepository(private val dao: ChatDao) {
     suspend fun addAssistant(text: String) =
         dao.insert(ChatMessageEntity(role = "assistant", text = text))
     suspend fun clear() = dao.clearAll()
+}
+
+/** Repository for imported WhatsApp conversation history. */
+class WhatsAppImportRepository(
+    private val contactDao: WhatsAppContactDao,
+    private val messageDao: WhatsAppMessageDao
+) {
+    fun observeContacts(): Flow<List<WhatsAppContactEntity>> =
+        contactDao.observeAll()
+
+    suspend fun getContact(id: Long): WhatsAppContactEntity? = contactDao.getById(id)
+
+    suspend fun addContact(displayName: String): Long {
+        val normalized = displayName.trim().lowercase()
+        require(normalized.isNotBlank()) { "Contact name must not be blank" }
+        return contactDao.insert(
+            WhatsAppContactEntity(displayName = displayName.trim(), normalizedName = normalized)
+        )
+    }
+
+    suspend fun updateContact(contact: WhatsAppContactEntity) = contactDao.update(contact)
+
+    suspend fun deleteContact(id: Long) = contactDao.deleteById(id)
+
+    fun observeMessages(contactId: Long): Flow<List<WhatsAppMessageEntity>> =
+        messageDao.observeByContact(contactId)
+
+    suspend fun commitMessages(
+        contactId: Long,
+        userSenderName: String,
+        messages: List<ImportedMessage>
+    ) = messageDao.insertAll(
+        messages.map {
+            WhatsAppMessageEntity(
+                contactId = contactId,
+                senderName = it.senderName,
+                isUser = it.senderName.equals(userSenderName, ignoreCase = true),
+                message = it.message,
+                timestampMs = it.timestampMs
+            )
+        }
+    )
+
+    suspend fun messageCountsByContact(): List<WhatsAppMessageDao.MessageCount> =
+        messageDao.messageCountsByContact()
+
+    data class ImportedMessage(
+        val senderName: String,
+        val message: String,
+        val timestampMs: Long
+    )
 }

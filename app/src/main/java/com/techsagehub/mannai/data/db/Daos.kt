@@ -93,3 +93,64 @@ interface ChatDao {
     @Query("DELETE FROM chat_messages")
     suspend fun clearAll()
 }
+
+/** WhatsApp imported contact DAO. */
+@Dao
+interface WhatsAppContactDao {
+    @Query("SELECT * FROM whatsapp_contacts ORDER BY displayName COLLATE NOCASE ASC")
+    fun observeAll(): Flow<List<WhatsAppContactEntity>>
+
+    @Query("SELECT * FROM whatsapp_contacts WHERE id = :id")
+    suspend fun getById(id: Long): WhatsAppContactEntity?
+
+    @Insert
+    suspend fun insert(contact: WhatsAppContactEntity): Long
+
+    @Update
+    suspend fun update(contact: WhatsAppContactEntity)
+
+    @Delete
+    suspend fun delete(contact: WhatsAppContactEntity)
+
+    @Query("DELETE FROM whatsapp_contacts WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM whatsapp_contacts")
+    suspend fun clearAll()
+}
+
+/** WhatsApp imported message DAO. */
+@Dao
+interface WhatsAppMessageDao {
+    @Query(
+        "SELECT * FROM whatsapp_messages WHERE contactId = :contactId " +
+            "ORDER BY timestampMs ASC, id ASC"
+    )
+    fun observeByContact(contactId: Long): Flow<List<WhatsAppMessageEntity>>
+
+    @Query("SELECT * FROM whatsapp_messages WHERE id = :id")
+    suspend fun getById(id: Long): WhatsAppMessageEntity?
+
+    @Insert
+    suspend fun insert(message: WhatsAppMessageEntity): Long
+
+    @Insert
+    suspend fun insertAll(messages: List<WhatsAppMessageEntity>): List<Long>
+
+    @Delete
+    suspend fun delete(message: WhatsAppMessageEntity)
+
+    @Query("DELETE FROM whatsapp_messages WHERE contactId = :contactId")
+    suspend fun deleteByContact(contactId: Long): Int
+
+    @Query("DELETE FROM whatsapp_messages")
+    suspend fun clearAll()
+
+    @Query(
+        "SELECT contactId, COUNT(*) as cnt FROM whatsapp_messages " +
+            "GROUP BY contactId ORDER BY cnt DESC"
+    )
+    suspend fun messageCountsByContact(): List<MessageCount>
+
+    data class MessageCount(val contactId: Long, val cnt: Int)
+}

@@ -2,6 +2,7 @@ package com.techsagehub.mannai.data.db
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /** A user task. reminderAt (epoch millis) optionally triggers a notification. */
@@ -75,7 +76,8 @@ data class WhatsAppContactEntity(
         parentColumns = ["id"],
         childColumns = ["contactId"],
         onDelete = ForeignKey.CASCADE
-    )]
+    )],
+    indices = [Index(value = ["contactId"]), Index(value = ["timestampMs"])]
 )
 data class WhatsAppMessageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

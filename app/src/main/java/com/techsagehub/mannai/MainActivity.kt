@@ -194,6 +194,7 @@ class MainActivity : ComponentActivity() {
                         SCREEN_REPLY -> ReplyScreen(replyVm, onShare = { shareText(it) })
                         SCREEN_SETTINGS -> SettingsScreen(
                             settings = app.settings,
+                            whatsAppImport = app.whatsAppImport,
                             serviceState = serviceState,
                             serviceRunning = serviceRunning,
                             speechAvailable = android.speech.SpeechRecognizer.isRecognitionAvailable(context),

@@ -7,6 +7,7 @@ import com.techsagehub.mannai.data.ReminderRepository
 import com.techsagehub.mannai.data.NoteRepository
 import com.techsagehub.mannai.data.SettingsStore
 import com.techsagehub.mannai.data.TaskRepository
+import com.techsagehub.mannai.data.WhatsAppImportRepository
 import com.techsagehub.mannai.data.db.MannAIDatabase
 import com.techsagehub.mannai.notify.MannAIChannels
 
@@ -23,6 +24,8 @@ class MannAIApp : Application() {
         private set
     lateinit var executor: CommandExecutor
         private set
+    lateinit var whatsAppImport: WhatsAppImportRepository
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -34,5 +37,6 @@ class MannAIApp : Application() {
         reminders = ReminderRepository(db.reminderDao())
         chat = ChatRepository(db.chatDao())
         executor = CommandExecutor(this, tasks, notes, reminders, settings)
+        whatsAppImport = WhatsAppImportRepository(db.whatsAppContactDao(), db.whatsAppMessageDao())
     }
 }

@@ -46,6 +46,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.techsagehub.mannai.assistant.WakePhrase
 import com.techsagehub.mannai.data.SettingsStore
+import com.techsagehub.mannai.data.WhatsAppImportRepository
 import com.techsagehub.mannai.service.AssistantService
 import com.techsagehub.mannai.service.AssistantState
 import com.techsagehub.mannai.service.WhatsAppNotificationListener
@@ -56,6 +57,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun SettingsScreen(
     settings: SettingsStore,
+    whatsAppImport: WhatsAppImportRepository,
     serviceState: AssistantState,
     serviceRunning: Boolean,
     speechAvailable: Boolean,
@@ -319,6 +321,14 @@ fun SettingsScreen(
                 "Notifications from unlisted or unidentified senders are ignored. " +
                     "No messages are sent automatically — every reply needs your approval.",
                 color = MutedText, fontSize = 10.sp, lineHeight = 15.sp
+            )
+        }
+
+        // ---- WhatsApp chat import ----
+        SettingsCard("WhatsApp chat import", "Import exported .txt conversations") {
+            WhatsAppImportScreen(
+                repository = whatsAppImport,
+                onImportComplete = { }
             )
         }
 
