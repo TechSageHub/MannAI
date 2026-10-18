@@ -33,6 +33,9 @@ class SettingsStore(context: Context) {
     private val _aiModel = MutableStateFlow(prefs.getString(KEY_AI_MODEL, DEFAULT_MODEL) ?: DEFAULT_MODEL)
     val aiModel: StateFlow<String> = _aiModel.asStateFlow()
 
+    private val _aiProvider = MutableStateFlow(prefs.getString(KEY_AI_PROVIDER, DEFAULT_AI_PROVIDER) ?: DEFAULT_AI_PROVIDER)
+    val aiProvider: StateFlow<String> = _aiProvider.asStateFlow()
+
     var assistantNameValue: String
         get() = _assistantName.value
         set(v) {
@@ -59,17 +62,42 @@ class SettingsStore(context: Context) {
         }
 
     fun saveAiConfig(endpoint: String, key: String, model: String) {
+        saveAiConfig(endpoint, key, model, _aiProvider.value)
+    }
+
+    fun saveAiConfig(endpoint: String, key: String, model: String, provider: String) {
+        val p = provider.ifBlank { DEFAULT_AI_PROVIDER }
         prefs.edit {
             putString(KEY_AI_ENDPOINT, endpoint.trim())
             putString(KEY_AI_KEY, key.trim())
-            putString(KEY_AI_MODEL, model.trim().ifEmpty { DEFAULT_MODEL })
+            putString(KEY_AI_MODEL, model.trim().ifEmpty { defaultModelFor(p) })
+            putString(KEY_AI_PROVIDER, p)
         }
         _aiEndpoint.value = endpoint.trim()
         _aiKey.value = key.trim()
-        _aiModel.value = model.trim().ifEmpty { DEFAULT_MODEL }
+        _aiModel.value = model.trim().ifEmpty { defaultModelFor(p) }
+        _aiProvider.value = p
     }
 
-    fun clearAiConfig() = saveAiConfig("", "", DEFAULT_MODEL)
+    fun setAiProvider(provider: String) {
+        val p = provider.ifBlank { DEFAULT_AI_PROVIDER }
+        prefs.edit { putString(KEY_AI_PROVIDER, p) }
+        _aiProvider.value = p
+        // Reset model to the default for the newly selected provider if it is still the other provider's default.
+        val current = _aiModel.value
+        if (current == DEFAULT_GEMINI_MODEL || current == DEFAULT_MODEL) {
+            _aiModel.value = defaultModelFor(p)
+            prefs.edit { putString(KEY_AI_MODEL, defaultModelFor(p)) }
+        }
+    }
+
+    /** Default model for a given provider. */
+    fun defaultModelFor(provider: String): String = when (provider) {
+        PROVIDER_GEMINI -> DEFAULT_GEMINI_MODEL
+        else -> DEFAULT_MODEL
+    }
+
+    fun clearAiConfig() = saveAiConfig("", "", DEFAULT_MODEL, DEFAULT_AI_PROVIDER)
 
     val isAiConfigured: Boolean
         get() = _aiEndpoint.value.isNotBlank() && _aiKey.value.isNotBlank()
@@ -115,12 +143,17 @@ class SettingsStore(context: Context) {
     companion object {
         const val DEFAULT_NAME = "MannAI"
         const val DEFAULT_MODEL = "gpt-4o-mini"
+        const val DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
+        const val PROVIDER_GEMINI = "gemini"
+        const val PROVIDER_OPENAI_COMPATIBLE = "openai_compatible"
+        const val DEFAULT_AI_PROVIDER = PROVIDER_GEMINI
         const val KEY_NAME = "assistant_name"
         const val KEY_WAKE = "wake_enabled"
         const val KEY_SPEAK = "speak_responses"
         const val KEY_AI_ENDPOINT = "ai_endpoint"
         const val KEY_AI_KEY = "ai_key"
         const val KEY_AI_MODEL = "ai_model"
+        const val KEY_AI_PROVIDER = "ai_provider"
         const val KEY_ALLOWED_SENDERS = "allowed_senders"
     }
 }

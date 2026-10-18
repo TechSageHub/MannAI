@@ -13,6 +13,7 @@ import com.techsagehub.mannai.data.db.WhatsAppContactEntity
 import com.techsagehub.mannai.data.db.WhatsAppMessageDao
 import com.techsagehub.mannai.data.db.WhatsAppMessageEntity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 
 class TaskRepository(private val dao: TaskDao) {
     fun observeAll(): Flow<List<TaskEntity>> = dao.observeAll()
@@ -115,6 +116,15 @@ class WhatsAppImportRepository(
 
     suspend fun messageCountsByContact(): List<WhatsAppMessageDao.MessageCount> =
         messageDao.messageCountsByContact()
+
+    /** Loads every imported contact together with its messages (one-shot, for reply context). */
+    suspend fun loadContactsWithMessages(): Pair<List<WhatsAppContactEntity>, Map<Long, List<WhatsAppMessageEntity>>> {
+        val contacts = contactDao.observeAll().first()
+        val messagesByContact = contacts.associate { contact ->
+            contact.id to messageDao.observeByContact(contact.id).first()
+        }
+        return Pair(contacts, messagesByContact)
+    }
 
     data class ImportedMessage(
         val senderName: String,
