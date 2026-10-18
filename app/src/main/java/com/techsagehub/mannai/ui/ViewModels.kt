@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.techsagehub.mannai.MannAIApp
 import com.techsagehub.mannai.assistant.AiProvider
+import com.techsagehub.mannai.assistant.AiProviderFactory
 import com.techsagehub.mannai.assistant.Command
 import com.techsagehub.mannai.assistant.CommandExecutor
 import com.techsagehub.mannai.assistant.CommandParser
@@ -14,12 +15,20 @@ import com.techsagehub.mannai.assistant.Effect
 import com.techsagehub.mannai.assistant.OpenAiCompatibleProvider
 import com.techsagehub.mannai.assistant.PendingConfirm
 import com.techsagehub.mannai.assistant.ReplyDrafter
+import com.techsagehub.mannai.assistant.ReplyPromptBuilder
 import com.techsagehub.mannai.assistant.ReplyTone
+import com.techsagehub.mannai.assistant.WhatsAppContextSelector
+import com.techsagehub.mannai.assistant.WhatsAppDraftResult
+import com.techsagehub.mannai.assistant.WhatsAppMessageEvent
+import com.techsagehub.mannai.assistant.WhatsAppNotificationParser
+import com.techsagehub.mannai.assistant.WhatsAppReplyGenerator
 import com.techsagehub.mannai.data.db.ChatMessageEntity
 import com.techsagehub.mannai.data.db.NoteEntity
 import com.techsagehub.mannai.data.db.ReminderEntity
 import com.techsagehub.mannai.data.db.TaskEntity
 import com.techsagehub.mannai.notify.ReminderScheduler
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -225,9 +234,7 @@ class ChatViewModel(val app: MannAIApp) : BaseViewModel() {
     }
 
     fun aiProvider(): AiProvider {
-        return if (app.settings.isAiConfigured) {
-            OpenAiCompatibleProvider(app.settings.aiEndpoint.value, app.settings.aiKey.value, app.settings.aiModel.value)
-        } else DisabledAiProvider()
+        return AiProviderFactory.create(app.settings)
     }
 
     private fun handleEffect(effect: com.techsagehub.mannai.assistant.Effect) {
@@ -255,6 +262,16 @@ class ReplyViewModel(val app: MannAIApp) : BaseViewModel() {
     val error = MutableStateFlow<String?>(null)
     val generating = MutableStateFlow(false)
 
+    // ---- WhatsApp notification-driven draft state ----
+    val whatsAppSender = MutableStateFlow("")
+    val whatsAppMessage = MutableStateFlow("")
+    val whatsAppContextNote = MutableStateFlow("")
+    val whatsAppContextFound = MutableStateFlow(false)
+    val whatsAppIsGroup = MutableStateFlow(false)
+    val whatsAppIsAmbiguous = MutableStateFlow(false)
+
+    private var generateJob: Job? = null
+
     fun generate() {
         error.value = null
         val res = ReplyDrafter.draft(original.value, intent.value, tone.value)
@@ -265,6 +282,76 @@ class ReplyViewModel(val app: MannAIApp) : BaseViewModel() {
         draft.value = res.draft.orEmpty()
     }
 
+    /** Populate the reply screen from an allowlisted WhatsApp notification event. Does not start generation. */
+    fun setNotificationEvent(event: WhatsAppMessageEvent) {
+        cancelGeneration()
+        error.value = null
+        draft.value = ""
+        whatsAppSender.value = event.sender
+        whatsAppMessage.value = event.message
+        whatsAppIsGroup.value = event.isGroup
+        whatsAppContextFound.value = false
+        whatsAppIsAmbiguous.value = false
+        whatsAppContextNote.value = ""
+        original.value = event.message
+    }
+
+    fun cancelGeneration() {
+        generateJob?.cancel()
+        generateJob = null
+        if (!generating.value) return
+        generating.value = false
+    }
+
+    /**
+     * Generate a context-aware WhatsApp reply draft using the configured AI provider.
+     * Requires an allowlisted sender and an online AI provider. Never sends a message.
+     */
+    fun generateWhatsAppDraft() {
+        if (whatsAppMessage.value.isBlank()) {
+            error.value = "No message to reply to."
+            return
+        }
+        error.value = null
+        generating.value = true
+        generateJob = viewModelScope.launch {
+            try {
+                val event = WhatsAppMessageEvent(
+                    sender = whatsAppSender.value,
+                    message = whatsAppMessage.value,
+                    timestampMs = System.currentTimeMillis(),
+                    isGroup = whatsAppIsGroup.value,
+                    packageName = WhatsAppNotificationParser.WHATSAPP_PACKAGE
+                )
+                val (contacts, messagesByContact) = app.whatsAppImport.loadContactsWithMessages()
+                val generator = WhatsAppReplyGenerator()
+                val provider = AiProviderFactory.create(app.settings)
+                val result = generator.generateDraft(
+                    event = event,
+                    tone = tone.value,
+                    contacts = contacts,
+                    messagesByContact = messagesByContact,
+                    provider = provider
+                )
+                whatsAppContextFound.value = result.context.hasContext
+                whatsAppIsAmbiguous.value = result.context.isAmbiguous
+                whatsAppContextNote.value = result.context.matchNote
+                if (result.success) {
+                    draft.value = result.draft.orEmpty()
+                    original.value = event.message
+                } else {
+                    error.value = result.error
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error.value = "Draft generation failed: ${e.message ?: "unknown error"}"
+            } finally {
+                generating.value = false
+            }
+        }
+    }
+
     fun refineWithAi() {
         val current = draft.value
         if (current.isBlank()) {
@@ -272,7 +359,7 @@ class ReplyViewModel(val app: MannAIApp) : BaseViewModel() {
             return
         }
         val provider: AiProvider = if (app.settings.isAiConfigured) {
-            OpenAiCompatibleProvider(app.settings.aiEndpoint.value, app.settings.aiKey.value, app.settings.aiModel.value)
+            AiProviderFactory.create(app.settings)
         } else {
             error.value = "Online AI isn't configured — the offline draft above is ready to use. Add an AI endpoint in Settings for AI refinement."
             return

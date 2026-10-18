@@ -20,9 +20,19 @@ class WhatsAppNotificationListener : NotificationListenerService() {
 
     private val settings: SettingsStore by lazy { SettingsStore(applicationContext) }
 
-    /** Last event published by this listener instance (observed by the UI when foreground). */
-    private val _lastEvent = MutableStateFlow<WhatsAppMessageEvent?>(null)
-    val lastEvent: StateFlow<WhatsAppMessageEvent?> = _lastEvent.asStateFlow()
+    companion object {
+        /**
+         * Shared last allowlisted WhatsApp event. All listener instances write here,
+         * so the UI can observe incoming messages without a service-instance reference.
+         */
+        private val _lastEventShared = MutableStateFlow<WhatsAppMessageEvent?>(null)
+        val lastEventShared: StateFlow<WhatsAppMessageEvent?> = _lastEventShared.asStateFlow()
+
+        /** Publishes an allowlisted event from any listener instance. */
+        fun publish(event: WhatsAppMessageEvent) {
+            _lastEventShared.value = event
+        }
+    }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
@@ -36,7 +46,7 @@ class WhatsAppNotificationListener : NotificationListenerService() {
         super.onNotificationPosted(sbn)
         val event = parseAndCheck(sbn)
         if (event != null) {
-            _lastEvent.value = event
+            publish(event)
         }
     }
 

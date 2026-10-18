@@ -34,9 +34,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.techsagehub.mannai.assistant.WhatsAppMessageEvent
 import com.techsagehub.mannai.service.AssistantService
+import com.techsagehub.mannai.service.WhatsAppNotificationListener
 import com.techsagehub.mannai.ui.Accent
 import com.techsagehub.mannai.ui.Background
 import com.techsagehub.mannai.ui.ChatScreen
@@ -168,6 +171,18 @@ class MainActivity : ComponentActivity() {
         HandleEvents(notesVm, snackbar)
         HandleEvents(remindersVm, snackbar)
         HandleEvents(replyVm, snackbar)
+
+        // Surface allowlisted WhatsApp notification events to the Reply ViewModel.
+        // StateFlow conflation dedupes identical repeated notifications. Populating the
+        // VM does not start AI generation; the user initiates draft generation on Reply.
+        val whatsAppEvent by WhatsAppNotificationListener.lastEventShared.collectAsState(null)
+        LaunchedEffect(whatsAppEvent) {
+            val event = whatsAppEvent
+            if (event != null) {
+                replyVm.setNotificationEvent(event)
+                snackbar.showSnackbar("WhatsApp message from ${event.sender} — open Reply to draft a response.")
+            }
+        }
 
         Surface(modifier = Modifier.fillMaxSize(), color = Background) {
             Scaffold(
