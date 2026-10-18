@@ -73,10 +73,12 @@ fun SettingsScreen(
     val speak by settings.speakResponses.collectAsState()
     val aiEndpoint by settings.aiEndpoint.collectAsState()
     val aiModel by settings.aiModel.collectAsState()
+    val aiProvider by settings.aiProvider.collectAsState()
     val aiConfigured = settings.isAiConfigured
     val allowedSenders by settings.allowedSenders.collectAsState()
 
     var nameDraft by remember(name) { mutableStateOf(name) }
+    var providerDraft by remember(aiProvider) { mutableStateOf(aiProvider) }
     var micGranted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -223,12 +225,47 @@ fun SettingsScreen(
                     "for open-ended questions and AI reply refinement. The key stays on this phone.",
                 color = MutedText, fontSize = 11.sp, lineHeight = 16.sp
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("AI provider", color = PrimaryText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = { providerDraft = SettingsStore.PROVIDER_GEMINI },
+                        enabled = providerDraft != SettingsStore.PROVIDER_GEMINI,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (providerDraft == SettingsStore.PROVIDER_GEMINI) Accent else PanelLight,
+                            contentColor = if (providerDraft == SettingsStore.PROVIDER_GEMINI) Background else PrimaryText
+                        )
+                    ) { Text("Gemini", fontSize = 11.sp) }
+                    OutlinedButton(
+                        onClick = { providerDraft = SettingsStore.PROVIDER_OPENAI_COMPATIBLE },
+                        enabled = providerDraft != SettingsStore.PROVIDER_OPENAI_COMPATIBLE,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (providerDraft == SettingsStore.PROVIDER_OPENAI_COMPATIBLE) Accent else PanelLight,
+                            contentColor = if (providerDraft == SettingsStore.PROVIDER_OPENAI_COMPATIBLE) Background else PrimaryText
+                        )
+                    ) { Text("OpenAI-compatible", fontSize = 11.sp) }
+                }
+            }
+            if (providerDraft == SettingsStore.PROVIDER_GEMINI) {
+                Text(
+                    "Gemini uses a fixed Google endpoint; only the API key and model are required. " +
+                        "Key stays on this phone.",
+                    color = MutedText, fontSize = 10.sp, lineHeight = 15.sp
+                )
+            }
             Field(value = endpointDraft, onChange = { endpointDraft = it }, label = "Endpoint (https://…/v1)")
             Field(value = keyDraft, onChange = { keyDraft = it }, label = "API key (stored on device only)")
             Field(value = modelDraft, onChange = { modelDraft = it }, label = "Model")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    onClick = { settings.saveAiConfig(endpointDraft, keyDraft.ifBlank { settings.aiKey.value }, modelDraft) },
+                    onClick = {
+                        settings.saveAiConfig(endpointDraft, keyDraft.ifBlank { settings.aiKey.value }, modelDraft, providerDraft)
+                        providerDraft = settings.aiProvider.value
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Background)
                 ) { Text("Save", fontSize = 12.sp) }
                 if (aiConfigured) {
@@ -236,6 +273,7 @@ fun SettingsScreen(
                         settings.clearAiConfig()
                         endpointDraft = ""
                         keyDraft = ""
+                        providerDraft = settings.aiProvider.value
                     }) { Text("Remove", color = Red, fontSize = 12.sp) }
                 }
             }
